@@ -1,48 +1,50 @@
-import React, { useState, useEffect } from 'react';
-import logo from './logo.svg';
-import './App.css';
+import React from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import Header from "./components/Header";
+import RoleSelect from "./pages/RoleSelect";
+import MentorDashboard from "./pages/MentorDashboard";
+import MentorParticipantDetails from "./pages/MentorParticipantDetails";
+import InternDashboard from "./pages/InternDashboard";
 
-// PUBLIC_INTERFACE
-function App() {
-  const [theme, setTheme] = useState('light');
+/**
+ * Internal layout wrapper that decides whether to show the global header based on route.
+ * We keep it simple: always show the header (header-only layout requirement).
+ */
+function AppShell() {
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  // Effect to apply theme to document element
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
-
-  // PUBLIC_INTERFACE
-  const toggleTheme = () => {
-    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+  const handleLogout = () => {
+    // UI-only logout: route back to role chooser.
+    navigate("/");
   };
 
   return (
-    <div className="App">
-      <header className="App-header">
-        <button 
-          className="theme-toggle" 
-          onClick={toggleTheme}
-          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-        >
-          {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
-        </button>
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <p>
-          Current theme: <strong>{theme}</strong>
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div className="min-h-screen bg-teal-50">
+      <Header
+        onLogout={handleLogout}
+        currentPath={location.pathname}
+      />
+      <main className="mx-auto w-full max-w-6xl px-4 pb-12 pt-6 sm:px-6 lg:px-8">
+        <Routes>
+          <Route path="/" element={<RoleSelect />} />
+          <Route path="/mentor" element={<MentorDashboard />} />
+          <Route path="/mentor/participant/:id" element={<MentorParticipantDetails />} />
+          <Route path="/intern" element={<InternDashboard />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
     </div>
+  );
+}
+
+// PUBLIC_INTERFACE
+function App() {
+  /** Main application entry component. Provides client-side routing for the UI-only app. */
+  return (
+    <BrowserRouter>
+      <AppShell />
+    </BrowserRouter>
   );
 }
 
