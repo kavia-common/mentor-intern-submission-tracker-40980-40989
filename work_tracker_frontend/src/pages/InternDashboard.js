@@ -4,6 +4,26 @@ import Button from "../components/Button";
 import Card from "../components/Card";
 import FileItem from "../components/FileItem";
 
+/**
+ * Convert a Date into YYYY-MM-DD in local time (not UTC).
+ * We avoid toISOString() here to prevent timezone off-by-one issues.
+ */
+function toLocalIsoDate(dateObj) {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Convert a Date into HH:mm in local time.
+ */
+function toLocalTimeHHmm(dateObj) {
+  const hh = String(dateObj.getHours()).padStart(2, "0");
+  const mm = String(dateObj.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 function isoToDayLabel(isoDate) {
   if (!isoDate) return "";
   const date = new Date(`${isoDate}T00:00:00`);
@@ -21,6 +41,7 @@ const INITIAL_SUBMISSIONS = [
   {
     id: "seed-1",
     date: "2026-01-02",
+    time: "09:15",
     day: "Friday",
     description: "Set up project structure and created initial components.",
     files: [{ name: "setup-notes.pdf", type: "application/pdf", previewUrl: null }],
@@ -29,6 +50,7 @@ const INITIAL_SUBMISSIONS = [
   {
     id: "seed-2",
     date: "2026-01-03",
+    time: "17:40",
     day: "Saturday",
     description: "Built submission history UI and basic edit/delete interactions.",
     files: [{ name: "history-screenshot.png", type: "image/png", previewUrl: null }],
@@ -47,14 +69,13 @@ function InternDashboard() {
     [submissions, editingId]
   );
 
-  const [date, setDate] = useState("");
+  // Note: date/time are system-generated at submit time; no manual inputs.
   const [day, setDay] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState([]);
 
   const resetForm = () => {
     setEditingId(null);
-    setDate("");
     setDay("");
     setDescription("");
     // Clean up preview URLs.
@@ -67,7 +88,6 @@ function InternDashboard() {
     files.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
 
     setEditingId(submission.id);
-    setDate(submission.date);
     setDay(submission.day);
     setDescription(submission.description);
 
@@ -78,14 +98,6 @@ function InternDashboard() {
       previewUrl: null,
     }));
     setFiles(reconstructed);
-  };
-
-  const onDateChange = (value) => {
-    setDate(value);
-    const autoDay = isoToDayLabel(value);
-    // Auto-fill but keep editable: only set if empty or not editing the day actively.
-    if (!day) setDay(autoDay);
-    else setDay((prev) => prev || autoDay);
   };
 
   const onFileChange = (e) => {
@@ -101,15 +113,21 @@ function InternDashboard() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
+    // Requirements: capture system date/time automatically at submit time.
+    const now = new Date();
+    const systemDate = toLocalIsoDate(now);
+    const systemTime = toLocalTimeHHmm(now);
+
     const entry = {
       id: editingId || makeId(),
-      date: date || new Date().toISOString().slice(0, 10),
-      day: day || isoToDayLabel(date) || "Day",
+      date: systemDate,
+      time: systemTime,
+      day: day || isoToDayLabel(systemDate) || "Day",
       description: description || "(No description provided)",
       files: files.length
         ? files.map((f) => ({ name: f.name, type: f.type, previewUrl: f.previewUrl || null }))
         : [{ name: "no-file.txt", type: "text/plain", previewUrl: null }],
-      // UI-only: set a default "pending-like" status using existing styles.
+      // UI-only: keep existing status when editing; else set a default.
       status: editingSubmission?.status || "Connect Immediately",
     };
 
@@ -127,6 +145,11 @@ function InternDashboard() {
     setSubmissions((prev) => prev.filter((s) => s.id !== id));
     if (editingId === id) resetForm();
   };
+
+  // Read-only timestamp preview (matches requirement example; derived from new Date()).
+  // This is for UI display only; the saved timestamp is captured at submit time.
+  const nowPreview = useMemo(() => new Date(), [editingId]);
+  const nowPreviewLabel = `Today, ${toLocalIsoDate(nowPreview)} ${toLocalTimeHHmm(nowPreview)}`;
 
   return (
     <div>
@@ -166,25 +189,30 @@ function InternDashboard() {
 
           <form onSubmit={handleSubmit} className="mt-4 grid gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Date
-                <input
-                  type="date"
-                  className="focus-ring w-full rounded-xl border-slate-200"
-                  value={date}
-                  onChange={(e) => onDateChange(e.target.value)}
-                  required
-                />
-              </label>
+              <div className="grid gap-1">
+                <div className="text-sm font-semibold text-slate-700">Timestamp</div>
+                <div
+                  className={[
+                    "rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5",
+                    "text-sm font-semibold text-slate-800",
+                  ].join(" ")}
+                  aria-label="Auto timestamp"
+                >
+                  {nowPreviewLabel}
+                </div>
+                <div className="text-xs font-medium text-slate-500">
+                  Date/time are captured automatically when you submit.
+                </div>
+              </div>
 
               <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Day (auto-filled, editable)
+                Day (optional)
                 <input
                   type="text"
                   className="focus-ring w-full rounded-xl border-slate-200"
                   value={day}
                   onChange={(e) => setDay(e.target.value)}
-                  placeholder="e.g., Day 3 or Monday"
+                  placeholder="Leave blank to auto-fill (e.g., Monday)"
                 />
               </label>
             </div>
@@ -265,7 +293,8 @@ function InternDashboard() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-slate-500">
-                      {s.date} • <span className="text-slate-900">{s.day}</span>
+                      {s.date} {s.time ? `• ${s.time}` : ""} •{" "}
+                      <span className="text-slate-900">{s.day}</span>
                     </div>
                     <p className="mt-2 text-sm text-slate-700">{s.description}</p>
                   </div>
